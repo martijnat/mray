@@ -257,7 +257,7 @@ class Triangle():
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
         self.triangle_plane = Plane(self.center, self.normal)
-        self.size = 200*max(map(abs,[p1-p2,p2-p3,p1-p3]))
+        self.size = 200 * max(map(abs, [p1 - p2, p2 - p3, p1 - p3]))
 
     def get_color(self, pos):
         return self.color
@@ -287,10 +287,9 @@ class Triangle():
         if not hit:
             return NO_INTERSECTION
 
-
-        x,y,z = (self.center - (self.normal*self.size)).components()
-        surface = Sphere(x,y,z,self.size,self.color,self.reflectivity)
-        return surface.intersection(ray_origin,ray_direction,scene,lights,ray_depth+1)
+        x, y, z = (self.center - (self.normal * self.size)).components()
+        surface = Sphere(x, y, z, self.size, self.color, self.reflectivity)
+        return surface.intersection(ray_origin, ray_direction, scene, lights, ray_depth + 1)
 
 
 def normal_from_triangle(p1, p2, p3):
@@ -401,8 +400,8 @@ lights_sky = [
 
 
 carrot_point1 = vec3(-0.1, 1.3, 2.6)
-carrot_point2 = vec3( 0.1, 1.3, 2.6)
-carrot_point3 = vec3( 0.0, 1.4, 2.6)
+carrot_point2 = vec3(0.1, 1.3, 2.6)
+carrot_point3 = vec3(0.0, 1.4, 2.6)
 carrot_point4 = vec3(-0.0, 1.0, 2.0)
 
 scene_snowman = [
@@ -413,8 +412,10 @@ scene_snowman = [
     Sphere(0, 0.4, 3, 0.75, WHITE, 0.5),
     Sphere(0, 1.5, 3, 0.5, WHITE, 0.5),
     # arms
-    Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0), vec3(1.5, 1.0, 2.0), BLACK, 0.5),
-    Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0), vec3(-1.5, 1.4, 2.0), BLACK, 0.5),
+    Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0),
+             vec3(1.5, 1.0, 2.0), BLACK, 0.5),
+    Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0),
+             vec3(-1.5, 1.4, 2.0), BLACK, 0.5),
     # eyes
     Sphere(-0.2, 1.5, 2.5, 0.1, GREY, 0.5),
     Sphere(0.2, 1.5, 2.5, 0.1, GREY, 0.5),
@@ -427,13 +428,14 @@ scene_snowman = [
     Triangle(carrot_point1, carrot_point3, carrot_point4, ORANGE, 0.5),
     Triangle(carrot_point3, carrot_point2, carrot_point4, ORANGE, 0.5),
     # colored spheres
-    Sphere( 2,-1.0,5.0,1.0,RED,0.5),
-    Sphere(-2,-1.0,5.0,1.0,GREEN,0.5),
-    Sphere( 3,-1.0,3.0,1.0,YELLOW,0.5),
-    Sphere(-3,-1.0,3.0,1.0,BLUE,0.5),
+    Sphere(2, -1.0, 5.0, 1.0, RED, 0.5),
+    Sphere(-2, -1.0, 5.0, 1.0, GREEN, 0.5),
+    Sphere(3, -1.0, 3.0, 1.0, YELLOW, 0.5),
+    Sphere(-3, -1.0, 3.0, 1.0, BLUE, 0.5),
 ]
 
-scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
+scene_test = [CheckeredSphere(
+    0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
 
 pixelmap = [[(255, 0, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
              for x in range(WIDTH)] for y in range(HEIGHT)]
