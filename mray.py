@@ -256,19 +256,13 @@ class Triangle():
         self.color = color
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
-        # print(p1,p2,p3)
-        # quit(1)
-        # self.edge12 = Plane(p2,(vec3(1,0,0)).normalize())
-        # self.edge23 =Plane(p2,(self.center-(self.p2*0.5+self.p3*0.5)).normalize()*-1.1)
-        # self.edge13 =Plane(p3,(self.center-(self.p1*0.5+self.p3*0.5)).normalize()*1.1)
         self.triangle_plane = Plane(self.center, self.normal)
+        self.size = max(map(abs,[p1-p2,p2-p3,p1-p3]))
 
     def get_color(self, pos):
         return self.color
 
     def intersection(self, ray_origin, ray_direction, scene, lights, ray_depth):
-        "Möller–Trumbore intersection algorithm"
-        # https://en.wikipedia.org/wiki/Möller–Trumbore_intersection_algorithm
         NO_INTERSECTION = False, MAX_RAY_LENGTH, COLOR_BG
 
         hit = Moller_Trumbore(self.p1, self.p2, self.p3,
@@ -292,6 +286,11 @@ class Triangle():
 
         if not hit:
             return NO_INTERSECTION
+
+
+        x,y,z = (self.center - (self.normal*self.size*0.5)).components()
+        surface = Sphere(x,y,z,self.size*0.5,self.color,self.reflectivity)
+        return surface.intersection(ray_origin,ray_direction,scene,lights,ray_depth+1)
 
         color = vec3(0, 0, 0)
         intersection = self.center
@@ -455,6 +454,15 @@ scene_snowman = [
     Sphere(-2,-1.0,4.0,1.0,GREEN,0.5),
     Sphere( 3,-1.0,3.0,1.0,YELLOW,0.5),
     Sphere(-3,-1.0,3.0,1.0,BLUE,0.5),
+]
+
+scene_test = [
+    CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5),
+    Triangle(
+        vec3( 0, 1.5,3),
+        vec3( 3,-1.5,3),
+        vec3(-3,-1.5,3),
+        RED, 0.5),
 ]
 
 pixelmap = [[(255, 0, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
