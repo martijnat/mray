@@ -26,7 +26,7 @@ esc_draw_rgb_fg = "\x1b[38;2;%i;%i;%im"
 half_block = "▄"
 EPSILON = 0.000001
 MAX_RAY_DEPTH = 8
-MAX_RAY_LENGTH = 10**7
+MAX_RAY_LENGTH = 10**3
 TERM_WIDTH = 80
 TERM_HEIGHT = 24
 
@@ -257,7 +257,7 @@ class Triangle():
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
         self.triangle_plane = Plane(self.center, self.normal)
-        self.size = max(map(abs,[p1-p2,p2-p3,p1-p3]))
+        self.size = 200*max(map(abs,[p1-p2,p2-p3,p1-p3]))
 
     def get_color(self, pos):
         return self.color
@@ -288,29 +288,9 @@ class Triangle():
             return NO_INTERSECTION
 
 
-        x,y,z = (self.center - (self.normal*self.size*0.5)).components()
-        surface = Sphere(x,y,z,self.size*0.5,self.color,self.reflectivity)
+        x,y,z = (self.center - (self.normal*self.size)).components()
+        surface = Sphere(x,y,z,self.size,self.color,self.reflectivity)
         return surface.intersection(ray_origin,ray_direction,scene,lights,ray_depth+1)
-
-        color = vec3(0, 0, 0)
-        intersection = self.center
-        for light in lights:
-            if light.clear_path(intersection, scene, [], ray_depth + 1):
-                fullbright_color = self.get_color(
-                    intersection).transpose_mul(light.color)
-                angle = self.normal.dot(light.direction_to_pos(intersection))
-                if angle > 0:
-                    color += fullbright_color * angle
-
-        if self.reflectivity > 0:
-            bounce_start, bounce_direction = bounce_ray(
-                intersection, ray_direction, self.normal)
-            reflected_color = raytrace(
-                bounce_start, bounce_direction, scene, lights, ray_depth + 1)
-            color = color * (1 - self.reflectivity) + \
-                (reflected_color * self.reflectivity)
-
-        return hit, dist, color
 
 
 def normal_from_triangle(p1, p2, p3):
@@ -446,24 +426,14 @@ scene_snowman = [
     Triangle(carrot_point2, carrot_point1, carrot_point4, ORANGE, 0.5),
     Triangle(carrot_point1, carrot_point3, carrot_point4, ORANGE, 0.5),
     Triangle(carrot_point3, carrot_point2, carrot_point4, ORANGE, 0.5),
-    # feet
-    Sphere(-0.5,-1.7,2.4,0.3,WHITE,0.5),
-    Sphere( 0.5,-1.7,2.4,0.3,WHITE,0.5),
-
-    Sphere( 2,-1.0,4.0,1.0,RED,0.5),
-    Sphere(-2,-1.0,4.0,1.0,GREEN,0.5),
+    # colored spheres
+    Sphere( 2,-1.0,5.0,1.0,RED,0.5),
+    Sphere(-2,-1.0,5.0,1.0,GREEN,0.5),
     Sphere( 3,-1.0,3.0,1.0,YELLOW,0.5),
     Sphere(-3,-1.0,3.0,1.0,BLUE,0.5),
 ]
 
-scene_test = [
-    CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5),
-    Triangle(
-        vec3( 0, 1.5,3),
-        vec3( 3,-1.5,3),
-        vec3(-3,-1.5,3),
-        RED, 0.5),
-]
+scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
 
 pixelmap = [[(255, 0, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
              for x in range(WIDTH)] for y in range(HEIGHT)]
