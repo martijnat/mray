@@ -25,7 +25,7 @@ esc_draw_rgb_bg = "\x1b[48;2;%i;%i;%im"
 esc_draw_rgb_fg = "\x1b[38;2;%i;%i;%im"
 half_block = "▄"
 EPSILON = 0.000001
-MAX_RAY_DEPTH = 8
+MAX_RAY_DEPTH = 3
 MAX_RAY_LENGTH = 10**3
 TERM_WIDTH = 80
 TERM_HEIGHT = 24
@@ -179,6 +179,12 @@ class Sphere():
         self.radius = radius
         self.color = color
         self.reflectivity = reflectivity
+        self.min_x = x - radius
+        self.min_y = y - radius
+        self.min_z = z - radius
+        self.max_x = x + radius
+        self.max_y = y + radius
+        self.max_z = z + radius
 
     def get_color(self, pos):
         return self.color
@@ -256,8 +262,17 @@ class Triangle():
         self.color = color
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
-        self.triangle_plane = Plane(self.center, self.normal)
+        self.triangle_plane = Plane(self.center, self.normal,self.color,self.reflectivity)
         self.size = 200 * max(map(abs, [p1 - p2, p2 - p3, p1 - p3]))
+        x1, y1, z1 = p1.components()
+        x2, y2, z2 = p2.components()
+        x3, y3, z3 = p3.components()
+        self.min_x = min([x1, x2, x3])
+        self.min_y = min([y1, y2, y3])
+        self.min_z = min([z1, z2, z3])
+        self.max_x = max([x1, x2, x3])
+        self.max_y = max([y1, y2, y3])
+        self.max_z = max([z1, z2, z3])
 
     def get_color(self, pos):
         return self.color
@@ -276,20 +291,7 @@ class Triangle():
             # back face culling
             return NO_INTERSECTION
 
-        # for edge in [self.edge12]:
-        #     hit,dist,color = edge.intersection(ray_origin,ray_direction,[],[],ray_depth+1)
-        #     if hit:
-        #         return NO_INTERSECTION
-
-        hit, dist, color = self.triangle_plane.intersection(
-            ray_origin, ray_direction, [], [], ray_depth + 1)
-
-        if not hit:
-            return NO_INTERSECTION
-
-        x, y, z = (self.center - (self.normal * self.size)).components()
-        surface = Sphere(x, y, z, self.size, self.color, self.reflectivity)
-        return surface.intersection(ray_origin, ray_direction, scene, lights, ray_depth + 1)
+        return self.triangle_plane.intersection(ray_origin, ray_direction, scene, lights, ray_depth)
 
 
 def normal_from_triangle(p1, p2, p3):
@@ -306,7 +308,7 @@ def normal_from_triangle(p1, p2, p3):
 class CheckeredSphere(Sphere):
 
     def get_color(self, pos):
-        density = 1 / 3
+        density = 2
         x, y, z = map(lambda x: int(x * density) if x >=
                       0 else int((density * -x + 1)), pos.components())
         if (x + y + z) % 2 == 0:
@@ -325,6 +327,75 @@ class CheckeredPlane(Plane):
             return self.color
         else:
             return (self.color * 0.5)
+
+
+def plane_intersection(value, direction, min_value, max_value):
+    if direction > 0:
+        return value <= max_value
+    elif direction < 0:
+        return value >= min_value
+    else:
+        return (value >= min_value) and (value <= max_value)
+
+
+class BoundingBox():
+    "Bounding box of objects a and b, used for faster collision checking"
+
+    def __init__(self, a, b):
+        "a and b are assumed to be spheres for now"
+        self.a = a
+        self.b = b
+        self.min_x = min(a.min_x, b.min_x)
+        self.min_y = min(a.min_y, b.min_y)
+        self.min_z = min(a.min_z, b.min_z)
+        self.max_x = max(a.max_x, b.max_x)
+        self.max_y = max(a.max_y, b.max_y)
+        self.max_z = max(a.max_z, b.max_z)
+
+    def intersection(self, ray_origin, ray_direction, scene, lights, ray_depth):
+        NO_INTERSECTION = False, MAX_RAY_LENGTH, COLOR_BG
+        # simple box check
+        dx, dy, dz = ray_direction.components()
+        x, y, z = ray_origin.components()
+        if not plane_intersection(x, dx, self.min_x, self.max_x):
+            return NO_INTERSECTION
+        if not plane_intersection(y, dy, self.min_y, self.max_y):
+            return NO_INTERSECTION
+        if not plane_intersection(z, dz, self.min_z, self.max_z):
+            return NO_INTERSECTION
+
+        does_intersect1, dist1, obj_color1 = self.a.intersection(
+            ray_origin, ray_direction, scene, lights, ray_depth)
+        does_intersect2, dist2, obj_color2 = self.b.intersection(
+            ray_origin, ray_direction, scene, lights, ray_depth)
+        if does_intersect1:
+            if does_intersect2:
+                if dist1 < dist2:
+                    return does_intersect1, dist1, obj_color1
+                else:
+                    return does_intersect2, dist2, obj_color2
+            else:
+                return does_intersect1, dist1, obj_color1
+        else:
+            return does_intersect2, dist2, obj_color2
+
+
+def bounding_box_hierarchy(input_list):
+    buffer_item = None
+    hierarchy = []
+    for item in input_list:
+        if buffer_item:
+            hierarchy.append(BoundingBox(item, buffer_item))
+            buffer_item = None
+        else:
+            buffer_item = item
+    if buffer_item:
+        hierarchy.append(buffer_item)
+
+    if len(hierarchy) > 2:
+        return bounding_box_hierarchy(hierarchy)
+    else:
+        return hierarchy
 
 
 def raytrace(origin, direction, scene, lights, ray_depth=1):
@@ -412,10 +483,11 @@ scene_snowman = [
     Sphere(0, 0.4, 3, 0.75, WHITE, 0.5),
     Sphere(0, 1.5, 3, 0.5, WHITE, 0.5),
     # arms
-    Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0),
-             vec3(1.5, 1.0, 2.0), BLACK, 0.5),
-    Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0),
-             vec3(-1.5, 1.4, 2.0), BLACK, 0.5),
+    BoundingBox(
+        Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0),
+                 vec3(1.5, 1.0, 2.0), BLACK, 0.5),
+        Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0),
+                 vec3(-1.5, 1.4, 2.0), BLACK, 0.5),),
     # eyes
     Sphere(-0.2, 1.5, 2.5, 0.1, GREY, 0.5),
     Sphere(0.2, 1.5, 2.5, 0.1, GREY, 0.5),
@@ -434,15 +506,32 @@ scene_snowman = [
     Sphere(-3, -1.0, 3.0, 1.0, BLUE, 0.5),
 ]
 
-scene_test = [CheckeredSphere(
-    0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
+
+suzanne = []
+for p1, p2, p3 in load_obj("suzanne.obj"):
+    offset = vec3(0, 0, 2)
+    suzanne.append(Triangle(p1 + offset, p2 + offset, p3 + offset, WHITE, 0.5))
+
+balls = [
+    Sphere( 1, -1.0,  3.5, 1.0, RED, 0.5),
+    Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0.5),
+    Sphere( 2, -1.0,  1.5, 1.0, YELLOW, 0.5),
+    Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0.5),
+    Sphere( 1, -1.0, -0.5, 1.0, CYAN, 0.5),
+    Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0.5),
+]
+
+scene_suzanne = bounding_box_hierarchy(suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
+
+# scene_snowman = bounding_box_hierarchy(scene_snowman)
+# scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
 
 pixelmap = [[(255, 0, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
              for x in range(WIDTH)] for y in range(HEIGHT)]
 
 for y in range(0, HEIGHT, 1):
     for x in range(0, WIDTH, 1):
-        r, g, b = raytrace_screen(y, x, scene_snowman, lights_sky).components()
+        r, g, b = raytrace_screen(y, x, scene_suzanne, lights_sky).components()
         R, G, B = map(lambda x: min(255, max(0, int((x**2) * 255))), [r, g, b])
         if (x % TERM_WIDTH_RATIO) == 0 and (y % TERM_HEIGHT_RATIO) == 0:
             stdout.write(esc_draw_rgb_bg % (R, G, B))
