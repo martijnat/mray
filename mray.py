@@ -262,7 +262,8 @@ class Triangle():
         self.color = color
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
-        self.triangle_plane = Plane(self.center, self.normal,self.color,self.reflectivity)
+        self.triangle_plane = Plane(
+            self.center, self.normal, self.color, self.reflectivity)
         self.size = 200 * max(map(abs, [p1 - p2, p2 - p3, p1 - p3]))
         x1, y1, z1 = p1.components()
         x2, y2, z2 = p2.components()
@@ -513,15 +514,16 @@ for p1, p2, p3 in load_obj("suzanne.obj"):
     suzanne.append(Triangle(p1 + offset, p2 + offset, p3 + offset, WHITE, 0.5))
 
 balls = [
-    Sphere( 1, -1.0,  3.5, 1.0, RED, 0.5),
+    Sphere(1, -1.0,  3.5, 1.0, RED, 0.5),
     Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0.5),
-    Sphere( 2, -1.0,  1.5, 1.0, YELLOW, 0.5),
+    Sphere(2, -1.0,  1.5, 1.0, YELLOW, 0.5),
     Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0.5),
-    Sphere( 1, -1.0, -0.5, 1.0, CYAN, 0.5),
+    Sphere(1, -1.0, -0.5, 1.0, CYAN, 0.5),
     Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0.5),
 ]
 
-scene_suzanne = bounding_box_hierarchy(suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
+scene_suzanne = bounding_box_hierarchy(
+    suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
 
 # scene_snowman = bounding_box_hierarchy(scene_snowman)
 # scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
