@@ -2,7 +2,7 @@
 
 A simple ray tracer
 
-![Screenshot](snowman.png)
+![Screenshot](screenshot.png)
 
 # Usage
 
