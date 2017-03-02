@@ -25,7 +25,7 @@ esc_draw_rgb_bg = "\x1b[48;2;%i;%i;%im"
 esc_draw_rgb_fg = "\x1b[38;2;%i;%i;%im"
 half_block = "▄"
 EPSILON = 0.000001
-MAX_RAY_DEPTH = 3
+MAX_RAY_DEPTH = 4
 MAX_RAY_LENGTH = 10**3
 TERM_WIDTH = 80
 TERM_HEIGHT = 24
@@ -569,22 +569,22 @@ scene_snowman = [
 
 
 balls = [
-    Sphere(1, -1.0,  3.5, 1.0, RED, 0),
-    Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0),
-    Sphere(2, -1.0,  1.5, 1.0, YELLOW, 0),
-    Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0),
-    Sphere(1, -1.0, -0.5, 1.0, CYAN, 0),
-    Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0),
+    Sphere(1, -1.0,  3.5, 1.0, RED, 0.5),
+    Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0.5),
+    Sphere(2, -1.0,  1.5, 1.0, YELLOW, 0.5),
+    Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0.5),
+    Sphere(1, -1.0, -0.5, 1.0, CYAN, 0.5),
+    Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0.5),
 ]
 
 suzanne = []
-for t in load_obj("suzanne.obj", offset=vec3(0, 0, 1), color=WHITE, reflectivity=0):
+for t in load_obj("suzanne.obj", offset=vec3(0, 0, 2), color=WHITE, reflectivity=0.5):
     suzanne.append(t)
 
 
 
 scene_suzanne = bounding_box_hierarchy(
-    suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0)] + balls)
+    suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
 
 # scene_snowman = bounding_box_hierarchy(scene_snowman)
 # scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
