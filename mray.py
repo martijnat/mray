@@ -256,14 +256,15 @@ class Plane(Sphere):
 
 class Triangle():
 
-    def __init__(self, p1, p2, p3, color=UNINTIALIZED, reflectivity=0):
+    def __init__(self, p1, p2, p3, n1, n2, n3, color=UNINTIALIZED, reflectivity=0):
         self.p1, self.p2, self.p3 = p1, p2, p3
+        self.n1, self.n2, self.n3 = n1, n2, n3
         self.center = (p1 * (1 / 3.0)) + (p2 * (1 / 3.0)) + (p3 * (1 / 3.0))
         self.color = color
         self.reflectivity = reflectivity
         self.normal = normal_from_triangle(p1, p2, p3)
         self.triangle_plane = Plane(
-            self.center, self.normal, self.color, self.reflectivity)
+            self.center, self.normal, self.color, 0)
         self.size = 200 * max(map(abs, [p1 - p2, p2 - p3, p1 - p3]))
         x1, y1, z1 = p1.components()
         x2, y2, z2 = p2.components()
@@ -277,6 +278,25 @@ class Triangle():
 
     def get_color(self, pos):
         return self.color
+
+    def get_normal(self, intersection, p1, p2, p3, n1, n2, n3):
+        # calculate distances
+        d1 = abs(intersection - p1)
+        d2 = abs(intersection - p2)
+        d3 = abs(intersection - p3)
+        # if one of them is 0, the intersection is at the vertice
+        if d1 <= 0:
+            return n1
+        if d2 <= 0:
+            return n2
+        if d3 <=0:
+            return n3
+
+        # caluclate the ratio between the distance
+        total_dist = d1+d2+d3
+        r1,r2,r3 = vec3(-1/d1,-1/d2,-1/d3).normalize().components()
+        new_normal = ((n1 * r1) + (n2 * r2) + (n3 * r3)).normalize()
+        return new_normal
 
     def intersection(self, ray_origin, ray_direction, scene, lights, ray_depth):
         NO_INTERSECTION = False, MAX_RAY_LENGTH, COLOR_BG
@@ -292,7 +312,33 @@ class Triangle():
             # back face culling
             return NO_INTERSECTION
 
-        return self.triangle_plane.intersection(ray_origin, ray_direction, scene, lights, ray_depth)
+        # find point of intersection
+        does_intersect, dist, obj_color = self.triangle_plane.intersection(
+            ray_origin, ray_direction, [], [], ray_depth)
+
+        intersection = ray_origin + (ray_direction * dist)
+
+        normal = self.get_normal(
+            intersection, self.p1, self.p2, self.p3, self.n1, self.n2, self.n3)
+
+        color = vec3(0, 0, 0)
+        for light in lights:
+            if light.clear_path(intersection, scene, [], ray_depth + 1):
+                fullbright_color = self.get_color(
+                    intersection).transpose_mul(light.color)
+                angle = normal.dot(light.direction_to_pos(intersection))
+                if angle > 0:
+                    color += fullbright_color * angle
+
+        if self.reflectivity > 0:
+            bounce_start, bounce_direction = bounce_ray(
+                intersection, ray_direction, normal)
+            reflected_color = raytrace(
+                bounce_start, bounce_direction, scene, lights, ray_depth + 1)
+            color = color * (1 - self.reflectivity) + \
+                (reflected_color * self.reflectivity)
+
+        return True, dist, color
 
 
 def normal_from_triangle(p1, p2, p3):
@@ -367,9 +413,9 @@ class BoundingBox():
 
         does_intersect1, dist1, obj_color1 = self.a.intersection(
             ray_origin, ray_direction, scene, lights, ray_depth)
-        does_intersect2, dist2, obj_color2 = self.b.intersection(
-            ray_origin, ray_direction, scene, lights, ray_depth)
         if does_intersect1:
+            does_intersect2, dist2, obj_color2 = self.b.intersection(
+                ray_origin, ray_direction, scene, lights, ray_depth)
             if does_intersect2:
                 if dist1 < dist2:
                     return does_intersect1, dist1, obj_color1
@@ -378,7 +424,7 @@ class BoundingBox():
             else:
                 return does_intersect1, dist1, obj_color1
         else:
-            return does_intersect2, dist2, obj_color2
+            return self.b.intersection(ray_origin, ray_direction, scene, lights, ray_depth)
 
 
 def bounding_box_hierarchy(input_list):
@@ -425,7 +471,7 @@ def raytrace_screen(y, x, scene, lights):
     return raytrace(EYE_POSITION, screen_ray, scene, lights)
 
 
-def load_obj(filename):
+def load_obj(filename, offset=vec3(0, 0, 0), color=WHITE, reflectivity=0):
     "Parse an .obj file and return an array of Triangles"
     global draw_dist_min, draw_dist_max, zoomfactor
     vertices, normals, faces = [], [], []
@@ -437,7 +483,8 @@ def load_obj(filename):
             if line[1] in "t":  # We ignore textures
                 pass
             elif line[1] == "n":  # normals
-                pass
+                coords = list(map(float, line[2:-1].split()))
+                normals.append(vec3(coords[0], coords[1], -coords[2]))
             else:
                 coords = list(map(float, line[1:-1].split()))
                 # vertices.append(vec3(coords[0],coords[1],coords[2])) # wrong
@@ -450,16 +497,30 @@ def load_obj(filename):
                     indexes = [list(map(lambda x:int(x.split("//")[0]),
                                         miniline.split(" ")))[0] - 1
                                for miniline in line[2:-1].split()]
+                    normali = [list(map(lambda x:int(x.split("//")[1]),
+                                        miniline.split(" ")))[0] - 1
+                               for miniline in line[2:-1].split()]
                 else:
                     indexes = [list(map(int, miniline.split("/")))[0] - 1
+                               for miniline in line[2:-1].split()]
+                    normali = [list(map(lambda x:int(x.split("/")[-1]),
+                                        miniline.split(" ")))[0] - 1
                                for miniline in line[2:-1].split()]
             else:
                 indexes = list(map(lambda x: (int(x) - 1), line[1:-1].split()))
 
             for i in range(0, len(indexes) - 2):
-                p1, p2, p3 = vertices[indexes[0]], vertices[
-                    indexes[i + 1]], vertices[indexes[i + 2]]
-                yield p1, p3, p2  # mirror
+                try:
+                    p1, p2, p3 = vertices[indexes[0]], vertices[
+                        indexes[i + 1]], vertices[indexes[i + 2]]
+                    n1, n2, n3 = normals[normali[0]], normals[
+                        normali[i + 1]], normals[normali[i + 2]]
+                    yield Triangle(p1 + offset, p3 + offset, p2 + offset, n1*-1, n3*-1, n2*-1, color, reflectivity)
+                except:
+                    p1, p2, p3 = vertices[indexes[0]], vertices[
+                        indexes[i + 1]], vertices[indexes[i + 2]]
+                    v = normal_from_triangle(p1, p2, p3)
+                    yield Triangle(p1 + offset, p3 + offset, p2 + offset, v, v, v, color, reflectivity)
         else:
             pass                # ignore all other information
 
@@ -467,7 +528,6 @@ def load_obj(filename):
 lights_sky = [
     Light(vec3(MAX_RAY_LENGTH // 2, MAX_RAY_LENGTH, -MAX_RAY_LENGTH // 2), COLOR_SKY),
     Light(EYE_POSITION, COLOR_SKY),
-
 ]
 
 
@@ -484,11 +544,11 @@ scene_snowman = [
     Sphere(0, 0.4, 3, 0.75, WHITE, 0.5),
     Sphere(0, 1.5, 3, 0.5, WHITE, 0.5),
     # arms
-    BoundingBox(
-        Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0),
-                 vec3(1.5, 1.0, 2.0), BLACK, 0.5),
-        Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0),
-                 vec3(-1.5, 1.4, 2.0), BLACK, 0.5),),
+    # BoundingBox(
+    #     Triangle(vec3(0.0, 0.25, 3.0), vec3(1.5, 1.4, 2.0),
+    #              vec3(1.5, 1.0, 2.0), BLACK, 0.5),
+    #     Triangle(vec3(-0.0, 0.25, 3.0), vec3(-1.5, 1.0, 2.0),
+    #              vec3(-1.5, 1.4, 2.0), BLACK, 0.5),),
     # eyes
     Sphere(-0.2, 1.5, 2.5, 0.1, GREY, 0.5),
     Sphere(0.2, 1.5, 2.5, 0.1, GREY, 0.5),
@@ -497,9 +557,9 @@ scene_snowman = [
     Sphere(0.0, 0.2, 2.3, 0.1, BLACK, 0.5),
     Sphere(0.0, -0.4, 2.2, 0.1, BLACK, 0.5),
     # carrot nose
-    Triangle(carrot_point2, carrot_point1, carrot_point4, ORANGE, 0.5),
-    Triangle(carrot_point1, carrot_point3, carrot_point4, ORANGE, 0.5),
-    Triangle(carrot_point3, carrot_point2, carrot_point4, ORANGE, 0.5),
+    # Triangle(carrot_point2, carrot_point1, carrot_point4, ORANGE, 0.5),
+    # Triangle(carrot_point1, carrot_point3, carrot_point4, ORANGE, 0.5),
+    # Triangle(carrot_point3, carrot_point2, carrot_point4, ORANGE, 0.5),
     # colored spheres
     Sphere(2, -1.0, 5.0, 1.0, RED, 0.5),
     Sphere(-2, -1.0, 5.0, 1.0, GREEN, 0.5),
@@ -508,22 +568,23 @@ scene_snowman = [
 ]
 
 
-suzanne = []
-for p1, p2, p3 in load_obj("suzanne.obj"):
-    offset = vec3(0, 0, 2)
-    suzanne.append(Triangle(p1 + offset, p2 + offset, p3 + offset, WHITE, 0.5))
-
 balls = [
-    Sphere(1, -1.0,  3.5, 1.0, RED, 0.5),
-    Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0.5),
-    Sphere(2, -1.0,  1.5, 1.0, YELLOW, 0.5),
-    Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0.5),
-    Sphere(1, -1.0, -0.5, 1.0, CYAN, 0.5),
-    Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0.5),
+    Sphere(1, -1.0,  3.5, 1.0, RED, 0),
+    Sphere(-1, -1.0,  3.5, 1.0, GREEN, 0),
+    Sphere(2, -1.0,  1.5, 1.0, YELLOW, 0),
+    Sphere(-2, -1.0,  1.5, 1.0, BLUE, 0),
+    Sphere(1, -1.0, -0.5, 1.0, CYAN, 0),
+    Sphere(-1, -1.0, -0.5, 1.0, MAGENTA, 0),
 ]
 
+suzanne = []
+for t in load_obj("suzanne.obj", offset=vec3(0, 0, 1), color=WHITE, reflectivity=0):
+    suzanne.append(t)
+
+
+
 scene_suzanne = bounding_box_hierarchy(
-    suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
+    suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0)] + balls)
 
 # scene_snowman = bounding_box_hierarchy(scene_snowman)
 # scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
