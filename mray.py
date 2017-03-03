@@ -17,9 +17,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import png
+import threading
 from sys import stdout, argv, stderr
 from random import random
 from math import sqrt, sin, cos, pi
+from tqdm import tqdm
 
 esc_draw_rgb_bg = "\x1b[48;2;%i;%i;%im"
 esc_draw_rgb_fg = "\x1b[38;2;%i;%i;%im"
@@ -289,14 +291,15 @@ class Triangle():
             return n1
         if d2 <= 0:
             return n2
-        if d3 <=0:
+        if d3 <= 0:
             return n3
 
         # caluclate the ratio between the distance
-        total_dist = d1+d2+d3
-        r1,r2,r3 = vec3(-1/d1,-1/d2,-1/d3).normalize().components()
-        new_normal = ((n1 * r1) + (n2 * r2) + (n3 * r3)).normalize()
-        return new_normal
+        total_dist = d1 + d2 + d3
+        max_dist = max([d1,d2,d3])
+        r1, r2, r3 = -1/ (d1**1), -1/ (d2**1), -1/ (d3**1)
+        new_normal = ((n1 * r1) + (n2 * r2) + (n3 * r3))
+        return new_normal.normalize()
 
     def intersection(self, ray_origin, ray_direction, scene, lights, ray_depth):
         NO_INTERSECTION = False, MAX_RAY_LENGTH, COLOR_BG
@@ -463,12 +466,14 @@ def raytrace(origin, direction, scene, lights, ray_depth=1):
         return nearest_color
 
 
-def raytrace_screen(y, x, scene, lights):
+def raytrace_screen(y, x, pixelmap, scene, lights):
     screen_ratio = HEIGHT / WIDTH
     screen_intersect = vec3((2 * x / WIDTH - 1),
                             (-screen_ratio * (2 * y / HEIGHT - 1)), 0)
     screen_ray = (screen_intersect - EYE_POSITION).normalize()
-    return raytrace(EYE_POSITION, screen_ray, scene, lights)
+    r, g, b = raytrace(EYE_POSITION, screen_ray, scene, lights).components()
+    R, G, B = map(lambda x: min(255, max(0, int((x**2) * 255))), [r, g, b])
+    pixelmap[y][x] = R, G, B
 
 
 def load_obj(filename, offset=vec3(0, 0, 0), color=WHITE, reflectivity=0):
@@ -515,7 +520,7 @@ def load_obj(filename, offset=vec3(0, 0, 0), color=WHITE, reflectivity=0):
                         indexes[i + 1]], vertices[indexes[i + 2]]
                     n1, n2, n3 = normals[normali[0]], normals[
                         normali[i + 1]], normals[normali[i + 2]]
-                    yield Triangle(p1 + offset, p3 + offset, p2 + offset, n1*-1, n3*-1, n2*-1, color, reflectivity)
+                    yield Triangle(p1 + offset, p3 + offset, p2 + offset, n1 * -1, n3 * -1, n2 * -1, color, reflectivity)
                 except:
                     p1, p2, p3 = vertices[indexes[0]], vertices[
                         indexes[i + 1]], vertices[indexes[i + 2]]
@@ -523,12 +528,6 @@ def load_obj(filename, offset=vec3(0, 0, 0), color=WHITE, reflectivity=0):
                     yield Triangle(p1 + offset, p3 + offset, p2 + offset, v, v, v, color, reflectivity)
         else:
             pass                # ignore all other information
-
-
-lights_sky = [
-    Light(vec3(MAX_RAY_LENGTH // 2, MAX_RAY_LENGTH, -MAX_RAY_LENGTH // 2), COLOR_SKY),
-    Light(EYE_POSITION, COLOR_SKY),
-]
 
 
 carrot_point1 = vec3(-0.1, 1.3, 2.6)
@@ -567,6 +566,10 @@ scene_snowman = [
     Sphere(-3, -1.0, 3.0, 1.0, BLUE, 0.5),
 ]
 
+lights_sky = [
+    Light(vec3(MAX_RAY_LENGTH // 2, MAX_RAY_LENGTH, -MAX_RAY_LENGTH // 2), COLOR_SKY),
+    Light(EYE_POSITION, COLOR_SKY),
+]
 
 balls = [
     Sphere(1, -1.0,  3.5, 1.0, RED, 0.5),
@@ -581,31 +584,24 @@ suzanne = []
 for t in load_obj("suzanne.obj", offset=vec3(0, 0, 2), color=WHITE, reflectivity=0.5):
     suzanne.append(t)
 
-
-
 scene_suzanne = bounding_box_hierarchy(
     suzanne + [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)] + balls)
-
 # scene_snowman = bounding_box_hierarchy(scene_snowman)
 # scene_test = [CheckeredSphere(0, -2 - MAX_RAY_LENGTH, 0, MAX_RAY_LENGTH, WHITE, 0.5)]
 
 pixelmap = [[(255, 0, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
              for x in range(WIDTH)] for y in range(HEIGHT)]
 
-for y in range(0, HEIGHT, 1):
+for y in tqdm(range(0, HEIGHT, 1), desc="Rendering", ascii=True):
+    thread_list = []
     for x in range(0, WIDTH, 1):
-        r, g, b = raytrace_screen(y, x, scene_suzanne, lights_sky).components()
-        R, G, B = map(lambda x: min(255, max(0, int((x**2) * 255))), [r, g, b])
-        if (x % TERM_WIDTH_RATIO) == 0 and (y % TERM_HEIGHT_RATIO) == 0:
-            stdout.write(esc_draw_rgb_bg % (R, G, B))
-            stdout.write(" ")
-            # stdout.write(esc_draw_rgb_fg%(R2,G2,B2))
-            stdout.write(esc_draw_rgb_bg % (0, 0, 0))
-            stdout.write(esc_draw_rgb_fg % (255, 0, 0))
-            stdout.flush()
-        pixelmap[y][x] = R, G, B
-    if (y % TERM_HEIGHT_RATIO) == 0:
-        stdout.write("\n")
+        t = threading.Thread(target=raytrace_screen, args=(
+            y, x, pixelmap, scene_suzanne, lights_sky))
+        thread_list.append(t)
+    for thread in thread_list:
+        thread.start()
+    for thread in thread_list:
+        thread.join()
 
 
 pngmap = [[subpixel for x in range(WIDTH)
